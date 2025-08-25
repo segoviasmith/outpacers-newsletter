@@ -1,0 +1,57 @@
+name: Newsletter Publish Workflow
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'newsletters/**/*.md'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'newsletters/**/*.md'
+
+jobs:
+  validate-newsletter:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies
+      run: |
+        npm install -g markdownlint-cli
+        
+    - name: Lint markdown files
+      run: |
+        markdownlint newsletters/**/*.md --fix
+        
+    - name: Check for broken links
+      run: |
+        npm install -g markdown-link-check
+        find newsletters -name "*.md" -exec markdown-link-check {} \;
+        
+  build-archive:
+    runs-on: ubuntu-latest
+    needs: validate-newsletter
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Generate newsletter archive
+      run: |
+        echo "# Newsletter Archive" > ARCHIVE.md
+        echo "" >> ARCHIVE.md
+        find newsletters -name "*.md" -type f | grep -v templates | sort -r | while read file; do
+          echo "- [$(basename $(dirname $file))]($file)" >> ARCHIVE.md
+        done
+        
+    - name: Commit archive updates
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add ARCHIVE.md
+        git commit -m "Update newsletter archive" || exit 0
+        git push
